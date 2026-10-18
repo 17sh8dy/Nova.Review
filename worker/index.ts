@@ -6,6 +6,8 @@ export interface Env {
   DB: D1Database;
   /** Salt for guest hashes. A real secret in production. */
   IP_SALT: string;
+  /** Service binding to the nova-help Worker (production). */
+  NOVA_ACCOUNTS?: Fetcher;
   /** Where Nova Accounts live. Defaults to the live Nova.Help. */
   ACCOUNTS_ORIGIN?: string;
   /** Comma-separated Nova account ids allowed to use /api/admin/* (and the Admin page) when signed in. */

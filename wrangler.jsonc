@@ -7,6 +7,9 @@
   "compatibility_date": "2026-10-01",
   "assets": { "directory": "dist", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] },
   "d1_databases": [{ "binding": "DB", "database_name": "nova-review", "database_id": "d67964cf-e302-4055-b542-9c39851f7e55", "migrations_dir": "migrations" }],
+  // Workers on workers.dev cannot fetch each other by public URL (Cloudflare error 1042), so the
+  // call to Nova Accounts goes through a service binding straight to the nova-help Worker.
+  "services": [{ "binding": "NOVA_ACCOUNTS", "service": "nova-help" }],
   // ADMIN_ACCOUNT_IDS: comma-separated Nova account ids who get the Admin page (your id is shown on /me).
   // IP_SALT and ADMIN_TOKEN are secrets (`wrangler secret put`); for local dev put IP_SALT in .dev.vars.
   "vars": { "ADMIN_ACCOUNT_IDS": "" }
