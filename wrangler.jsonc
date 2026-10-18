@@ -12,5 +12,5 @@
   "services": [{ "binding": "NOVA_ACCOUNTS", "service": "nova-help" }],
   // ADMIN_ACCOUNT_IDS: comma-separated Nova account ids who get the Admin page (your id is shown on /me).
   // IP_SALT and ADMIN_TOKEN are secrets (`wrangler secret put`); for local dev put IP_SALT in .dev.vars.
-  "vars": { "ADMIN_ACCOUNT_IDS": "" }
+  "vars": { "ADMIN_ACCOUNT_IDS": "NA-C4A2-TKDZ-Q7Z3" }
 }
