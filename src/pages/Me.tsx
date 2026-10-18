@@ -10,10 +10,19 @@ interface Note {
   read: number;
   createdAt: number;
 }
+interface Removal {
+  id: number;
+  product: string;
+  kind: 'review' | 'suggestion';
+  title: string;
+  reason: string | null;
+  createdAt: number;
+}
 interface Activity {
   reviews: Review[];
   suggestions: Suggestion[];
   notifications: Note[];
+  removals: Removal[];
 }
 
 const nameOf = (slug: string) => PRODUCTS.find(p => p.slug === slug)?.name ?? slug;
@@ -122,6 +131,20 @@ export default function Me({ go }: { go: (to: string) => void }) {
       </div>
 
       <h3>Settings</h3>
+      {data.removals.length > 0 && (
+        <div className="panel">
+          <h4>Removed by a moderator</h4>
+          <ol className="removals">
+            {data.removals.map(r => (
+              <li key={r.id}>
+                <b>{nameOf(r.product)} {r.kind} deleted</b> <span className="muted">· "{r.title}" · {date(r.createdAt)}</span>
+                <br />
+                <span className="muted">{r.reason ? `Reason: ${r.reason}` : 'There was no reason given.'}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
       <div className="panel form">
         <div className="bell">
           <BellToggle

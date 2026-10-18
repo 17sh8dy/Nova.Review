@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, useAuth } from '../auth.tsx';
 import { PRODUCTS, STATUS_LABELS, SUGGESTION_STATUSES, type SuggestionStatus } from '../lib/products.ts';
-import { REPORT_LABELS, type ReportReason } from '../lib/validate.ts';
+import { REASON_LIMIT, REPORT_LABELS, type ReportReason } from '../lib/validate.ts';
 import { date, Stars, type Review, type Suggestion } from '../ui.tsx';
 
 interface Reported {
@@ -18,6 +18,23 @@ interface Reported {
 
 const nameOf = (slug: string) => PRODUCTS.find(p => p.slug === slug)?.name ?? slug;
 
+/** Asks for the sentence or two the author will see, then removes. The reason is optional. */
+function RemoveBox({ kind, onRemove, onCancel }: { kind: string; onRemove: (reason: string) => void; onCancel: () => void }) {
+  const [reason, setReason] = useState('');
+  return (
+    <div className="remove-box">
+      <label>
+        Why is this {kind} being removed? <span className="muted">(optional, one or two sentences; the author sees it if they have a Nova Account)</span>
+        <textarea value={reason} onChange={e => setReason(e.target.value)} maxLength={REASON_LIMIT} rows={2} placeholder="e.g. It breaks the Nova Legal acceptable use rules." />
+      </label>
+      <div className="row">
+        <button className="danger-fill" onClick={() => onRemove(reason)}>Remove {kind}</button>
+        <button className="ghost" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 /** Maintainer console. The server decides who may use it; this page is only shown to them. */
 export default function Admin() {
   const { me } = useAuth();
@@ -25,6 +42,7 @@ export default function Admin() {
   const [reports, setReports] = useState<Reported[]>([]);
   const [data, setData] = useState<{ reviews: Review[]; suggestions: Suggestion[] } | null>(null);
   const [error, setError] = useState('');
+  const [removing, setRemoving] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -43,17 +61,21 @@ export default function Admin() {
   }, [me, load]);
 
   if (!me) return <p className="muted">Loading…</p>;
-  if (!me.isAdmin || error) return <p>Not available.</p>;
+  if (!me.isAdmin || (error && !data)) return <p>Not available.</p>;
   if (!data) return <p className="muted">Loading…</p>;
 
   const act = async (fn: () => Promise<unknown>) => {
     try {
+      setError('');
       await fn();
+      setRemoving(null);
       await load();
     } catch (e) {
       setError((e as Error).message);
     }
   };
+  const remove = (kind: 'review' | 'suggestion', id: number) => (reason: string) =>
+    act(() => api(kind === 'review' ? `/api/admin/reviews/${id}` : `/api/admin/suggestions/${id}`, { method: 'DELETE', body: { reason } }));
 
   return (
     <>
@@ -71,8 +93,9 @@ export default function Admin() {
           reports.map(r => {
             const reasons = [...new Set(r.reasons.split(','))].map(x => REPORT_LABELS[x as ReportReason] ?? x).join(', ');
             const notes = r.notes.split(' | ').filter(Boolean);
+            const key = `${r.type}-${r.id}`;
             return (
-              <article key={`${r.type}-${r.id}`} className="panel">
+              <article key={key} className="panel">
                 <div className="admin-row">
                   <div>
                     <p className="muted meta"><b>{nameOf(r.product)}</b> · {r.type} · {r.author} · <b>{r.count} report{r.count === 1 ? '' : 's'}</b>: {reasons}</p>
@@ -82,15 +105,10 @@ export default function Admin() {
                   </div>
                   <div className="row">
                     <button className="ghost" onClick={() => act(() => api(`/api/admin/reports/${r.type}/${r.id}/dismiss`, { method: 'POST' }))}>Dismiss</button>
-                    <button
-                      className="ghost danger"
-                      onClick={() =>
-                        confirm(`Remove this ${r.type}?`) &&
-                        act(() => api(r.type === 'review' ? `/api/admin/reviews/${r.id}` : `/api/admin/suggestions/${r.id}`, { method: 'DELETE' }))
-                      }
-                    >Remove content</button>
+                    <button className="ghost danger" onClick={() => setRemoving(key)}>Remove content</button>
                   </div>
                 </div>
+                {removing === key && <RemoveBox kind={r.type} onRemove={remove(r.type, r.id)} onCancel={() => setRemoving(null)} />}
               </article>
             );
           })}
@@ -111,9 +129,10 @@ export default function Admin() {
                   >
                     {SUGGESTION_STATUSES.map(st => <option key={st} value={st}>{STATUS_LABELS[st]}</option>)}
                   </select>
-                  <button className="link danger" onClick={() => confirm('Delete this suggestion?') && act(() => api(`/api/admin/suggestions/${s.id}`, { method: 'DELETE' }))}>Delete</button>
+                  <button className="link danger" onClick={() => setRemoving(`suggestion-${s.id}`)}>Delete</button>
                 </div>
               </div>
+              {removing === `suggestion-${s.id}` && <RemoveBox kind="suggestion" onRemove={remove('suggestion', s.id)} onCancel={() => setRemoving(null)} />}
             </article>
           ))}
         {tab === 'reviews' &&
@@ -126,8 +145,9 @@ export default function Admin() {
                   <h4>{r.title}</h4>
                   <p className="body">{r.body}</p>
                 </div>
-                <button className="link danger" onClick={() => confirm('Delete this review?') && act(() => api(`/api/admin/reviews/${r.id}`, { method: 'DELETE' }))}>Delete</button>
+                <button className="link danger" onClick={() => setRemoving(`review-${r.id}`)}>Delete</button>
               </div>
+              {removing === `review-${r.id}` && <RemoveBox kind="review" onRemove={remove('review', r.id)} onCancel={() => setRemoving(null)} />}
             </article>
           ))}
       </div>

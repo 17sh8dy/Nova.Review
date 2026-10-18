@@ -45,3 +45,12 @@ test('reports need a known type, a positive integer id and one of the five reaso
     assert.equal(validateReport(bad).ok, false);
   assert.equal(validateReport({ type: 'review', id: 1, reason: 'spam', note: 'x'.repeat(201) }).ok, false);
 });
+
+import { cleanReason, REASON_LIMIT } from '../src/lib/validate.ts';
+
+test('a removal reason is optional, trimmed, and capped', () => {
+  assert.deepEqual(cleanReason(undefined), { ok: true, value: null });
+  assert.deepEqual(cleanReason('   '), { ok: true, value: null });
+  assert.deepEqual(cleanReason('  Against   the rules. '), { ok: true, value: 'Against the rules.' });
+  assert.equal(cleanReason('x'.repeat(REASON_LIMIT + 1)).ok, false);
+});

@@ -43,6 +43,15 @@ export function validateReport(raw: unknown): { ok: true; value: ReportInput } |
   return { ok: true, value: { type: r.type, id: r.id, reason: r.reason as ReportReason, note } };
 }
 
+export const REASON_LIMIT = 300;
+
+/** The optional sentence or two a moderator gives when removing something. */
+export function cleanReason(raw: unknown): { ok: true; value: string | null } | { ok: false; error: string } {
+  const reason = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim() : '';
+  if (reason.length > REASON_LIMIT) return { ok: false, error: `Keep the reason under ${REASON_LIMIT} characters.` };
+  return { ok: true, value: reason || null };
+}
+
 export const LIMITS = { title: 80, body: 2000, author: 40, minBody: 10 };
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };

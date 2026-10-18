@@ -1,5 +1,5 @@
 import { PRODUCTS, reviewable, STATUS_LABELS, SUGGESTION_STATUSES, type SuggestionStatus } from '../src/lib/products.ts';
-import { validateReport, validateReview, validateSuggestion } from '../src/lib/validate.ts';
+import { cleanReason, validateReport, validateReview, validateSuggestion } from '../src/lib/validate.ts';
 import { resolveViewer, syncAvatar, type Viewer } from './auth.ts';
 import { passesTurnstile, type TurnstileEnv } from './turnstile.ts';
 
@@ -320,7 +320,7 @@ async function handle(req: Request, env: Env, path: string, viewer: Viewer): Pro
     }
 
     if (method === 'GET' && path === '/api/me/activity') {
-      const [rev, sug, notes] = await env.DB.batch([
+      const [rev, sug, notes, gone] = await env.DB.batch([
         env.DB.prepare(
           `SELECT ${REVIEW_COLS} FROM reviews r LEFT JOIN profiles p ON p.account_id = r.account_id
            WHERE r.account_id = ? ORDER BY r.created_at DESC`
@@ -330,9 +330,10 @@ async function handle(req: Request, env: Env, path: string, viewer: Viewer): Pro
         ).bind(account.id, `a:${account.id}`, account.id),
         env.DB.prepare(
           'SELECT id, kind, product, suggestion_id AS suggestionId, message, read, created_at AS createdAt FROM notifications WHERE account_id = ? ORDER BY created_at DESC LIMIT 50'
-        ).bind(account.id)
+        ).bind(account.id),
+        env.DB.prepare('SELECT id, product, kind, title, reason, created_at AS createdAt FROM removals WHERE account_id = ? ORDER BY created_at DESC LIMIT 50').bind(account.id)
       ]);
-      return json({ reviews: rows(rev), suggestions: rows(sug), notifications: rows(notes) });
+      return json({ reviews: rows(rev), suggestions: rows(sug), notifications: rows(notes), removals: rows(gone) });
     }
 
     if (method === 'PUT' && path === '/api/me/prefs') {
@@ -360,6 +361,7 @@ async function handle(req: Request, env: Env, path: string, viewer: Viewer): Pro
         env.DB.prepare('DELETE FROM suggestions WHERE account_id = ?').bind(account.id),
         env.DB.prepare('DELETE FROM reviews WHERE account_id = ?').bind(account.id),
         env.DB.prepare('DELETE FROM notifications WHERE account_id = ?').bind(account.id),
+        env.DB.prepare('DELETE FROM removals WHERE account_id = ?').bind(account.id),
         env.DB.prepare('DELETE FROM profiles WHERE account_id = ?').bind(account.id)
       ]);
       return json({ ok: true });
@@ -419,9 +421,18 @@ async function admin(req: Request, env: Env, path: string, viewer: Viewer): Prom
 
   m = path.match(/^\/api\/admin\/reviews\/(\d+)$/);
   if (m && req.method === 'DELETE') {
-    const r = await env.DB.prepare('DELETE FROM reviews WHERE id = ?').bind(+m[1]).run();
-    if (r.meta.changes) await env.DB.prepare("DELETE FROM reports WHERE target_type = 'review' AND target_id = ?").bind(+m[1]).run();
-    return r.meta.changes ? json({ ok: true }) : fail('Not found.', 404);
+    const reason = cleanReason(((await req.json().catch(() => null)) as { reason?: unknown } | null)?.reason);
+    if (!reason.ok) return fail(reason.error, 400);
+    const row = await env.DB.prepare('SELECT product, title, account_id FROM reviews WHERE id = ?').bind(+m[1]).first<{ product: string; title: string; account_id: string | null }>();
+    if (!row) return fail('Not found.', 404);
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM reviews WHERE id = ?').bind(+m[1]),
+      env.DB.prepare("DELETE FROM reports WHERE target_type = 'review' AND target_id = ?").bind(+m[1]),
+      ...(row.account_id
+        ? [env.DB.prepare("INSERT INTO removals (account_id, product, kind, title, reason, created_at) VALUES (?, ?, 'review', ?, ?, ?)").bind(row.account_id, row.product, row.title, reason.value, Date.now())]
+        : [])
+    ]);
+    return json({ ok: true });
   }
 
   m = path.match(/^\/api\/admin\/suggestions\/(\d+)$/);
@@ -429,13 +440,18 @@ async function admin(req: Request, env: Env, path: string, viewer: Viewer): Prom
   const id = +m[1];
 
   if (req.method === 'DELETE') {
-    const exists = await env.DB.prepare('SELECT id FROM suggestions WHERE id = ?').bind(id).first();
-    if (!exists) return fail('Not found.', 404);
+    const reason = cleanReason(((await req.json().catch(() => null)) as { reason?: unknown } | null)?.reason);
+    if (!reason.ok) return fail(reason.error, 400);
+    const row = await env.DB.prepare('SELECT product, title, account_id FROM suggestions WHERE id = ?').bind(id).first<{ product: string; title: string; account_id: string | null }>();
+    if (!row) return fail('Not found.', 404);
     await env.DB.batch([
       env.DB.prepare('DELETE FROM votes WHERE suggestion_id = ?').bind(id),
       env.DB.prepare('DELETE FROM notifications WHERE suggestion_id = ?').bind(id),
       env.DB.prepare("DELETE FROM reports WHERE target_type = 'suggestion' AND target_id = ?").bind(id),
-      env.DB.prepare('DELETE FROM suggestions WHERE id = ?').bind(id)
+      env.DB.prepare('DELETE FROM suggestions WHERE id = ?').bind(id),
+      ...(row.account_id
+        ? [env.DB.prepare("INSERT INTO removals (account_id, product, kind, title, reason, created_at) VALUES (?, ?, 'suggestion', ?, ?, ?)").bind(row.account_id, row.product, row.title, reason.value, Date.now())]
+        : [])
     ]);
     return json({ ok: true });
   }
