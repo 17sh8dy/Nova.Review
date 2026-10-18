@@ -1,8 +1,9 @@
 import { PRODUCTS, reviewable, STATUS_LABELS, SUGGESTION_STATUSES, type SuggestionStatus } from '../src/lib/products.ts';
 import { validateReport, validateReview, validateSuggestion } from '../src/lib/validate.ts';
 import { resolveViewer, syncAvatar, type Viewer } from './auth.ts';
+import { passesTurnstile, type TurnstileEnv } from './turnstile.ts';
 
-export interface Env {
+export interface Env extends TurnstileEnv {
   DB: D1Database;
   /** Salt for guest hashes. A real secret in production. */
   IP_SALT: string;
@@ -63,6 +64,9 @@ async function handle(req: Request, env: Env, path: string, viewer: Viewer): Pro
     account
       ? ((await env.DB.prepare('SELECT default_show_name AS d FROM profiles WHERE account_id = ?').bind(account.id).first<{ d: number }>())?.d ?? 1)
       : 1;
+  // Guests prove they are not a bot before they write or vote (accounts are never challenged).
+  const challenge = async () =>
+    account || (await passesTurnstile(req, env)) ? null : fail('We could not verify that you are not a bot. Please try again.', 403);
   const voterKey = async () => (account ? `a:${account.id}` : `g:${await ipHash(req, env, 'vote')}`);
 
   // ── Profile pictures: served from our copy, by a random key that is not the Nova id ──────
@@ -123,6 +127,8 @@ async function handle(req: Request, env: Env, path: string, viewer: Viewer): Pro
         return json({ product, reviews: rows(list), distribution, count, average });
       }
       if (method === 'POST') {
+        const blocked = await challenge();
+        if (blocked) return blocked;
         const raw = await body();
         const v = validateReview(raw);
         if (!v.ok) return fail(v.error, 400);
@@ -156,6 +162,8 @@ async function handle(req: Request, env: Env, path: string, viewer: Viewer): Pro
         return json({ product, suggestions: list.results.map(s => ({ ...s, votes: s.votes ?? 0 })) });
       }
       if (method === 'POST') {
+        const blocked = await challenge();
+        if (blocked) return blocked;
         const raw = await body();
         const v = validateSuggestion(raw);
         if (!v.ok) return fail(v.error, 400);
@@ -233,6 +241,8 @@ async function handle(req: Request, env: Env, path: string, viewer: Viewer): Pro
 
   // ── Reports (guests and accounts). Filing one never hides or removes anything. ──
   if (method === 'POST' && path === '/api/reports') {
+    const blocked = await challenge();
+    if (blocked) return blocked;
     const v = validateReport(await body());
     if (!v.ok) return fail(v.error, 400);
     const { type, id, reason, note } = v.value;
@@ -268,8 +278,10 @@ async function handle(req: Request, env: Env, path: string, viewer: Viewer): Pro
       return json({ ok: true });
     }
     if (method === 'POST') {
+      const blocked = await challenge();
+      if (blocked) return blocked;
       if (!account) {
-        // Guest voting is open but capped per (salted) IP per hour. Turnstile would be the next layer.
+        // Guest voting is open, challenged by Turnstile and also capped per (salted) IP per hour.
         const recent = await env.DB.prepare('SELECT COUNT(*) AS n FROM votes WHERE voter_key = ? AND created_at > ?')
           .bind(key, Date.now() - HOUR)
           .first<{ n: number }>();

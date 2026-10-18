@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createNovaAccountClient, SIGN_IN_FAILURES, type NovaSignInFlow } from '@nova/account-client';
 import { browserStorage } from '@nova/account-client/storage';
+import { challengeToken, needsChallenge } from './turnstile.ts';
 
 const storage = browserStorage('nova.review.account');
 const client = createNovaAccountClient({
@@ -32,9 +33,16 @@ export interface Me {
 /** fetch() against our API, attaching the Nova Account token when there is one. */
 export async function api<T = unknown>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const t = token();
+  const method = init.method ?? 'GET';
+  // Guests prove they are not a bot when they write, vote or report; signed-in people are never asked.
+  const challenge = !t && needsChallenge(method, path) ? await challengeToken() : null;
   const res = await fetch(path, {
-    method: init.method ?? 'GET',
-    headers: { ...(init.body ? { 'content-type': 'application/json' } : {}), ...(t ? { authorization: `Bearer ${t}` } : {}) },
+    method,
+    headers: {
+      ...(init.body ? { 'content-type': 'application/json' } : {}),
+      ...(t ? { authorization: `Bearer ${t}` } : {}),
+      ...(challenge ? { 'x-turnstile-token': challenge } : {})
+    },
     body: init.body ? JSON.stringify(init.body) : undefined
   });
   const data = (await res.json().catch(() => null)) as (T & { error?: string }) | null;
