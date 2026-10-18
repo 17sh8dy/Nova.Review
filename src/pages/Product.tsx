@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, useAuth } from '../auth.tsx';
-import { Avatar, Badge, date, ReviewForm, Stars, StatusPill, SuggestionForm, type Review, type Suggestion } from '../ui.tsx';
+import { Avatar, Badge, date, ReportMenu, ReviewForm, Stars, StatusPill, SuggestionForm, type Review, type Suggestion } from '../ui.tsx';
 
 interface Product {
   slug: string;
@@ -136,7 +136,9 @@ export default function ProductPage({ slug, go }: { slug: string; go: (to: strin
                         }}
                       >Delete</button>
                     </p>
-                  ) : null}
+                  ) : (
+                    <p className="actions"><ReportMenu type="review" id={r.id} /></p>
+                  )}
                 </article>
               )
             )}
@@ -190,7 +192,9 @@ export default function ProductPage({ slug, go }: { slug: string; go: (to: strin
                           }}
                         >Delete</button>
                       </p>
-                    ) : null}
+                    ) : (
+                      <p className="actions"><ReportMenu type="suggestion" id={s.id} /></p>
+                    )}
                   </div>
                 </article>
               )

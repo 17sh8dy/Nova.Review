@@ -1,20 +1,39 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, useAuth } from '../auth.tsx';
 import { PRODUCTS, STATUS_LABELS, SUGGESTION_STATUSES, type SuggestionStatus } from '../lib/products.ts';
+import { REPORT_LABELS, type ReportReason } from '../lib/validate.ts';
 import { date, Stars, type Review, type Suggestion } from '../ui.tsx';
+
+interface Reported {
+  type: 'review' | 'suggestion';
+  id: number;
+  product: string;
+  title: string;
+  body: string;
+  author: string;
+  count: number;
+  reasons: string;
+  notes: string;
+}
 
 const nameOf = (slug: string) => PRODUCTS.find(p => p.slug === slug)?.name ?? slug;
 
 /** Maintainer console. The server decides who may use it; this page is only shown to them. */
 export default function Admin() {
   const { me } = useAuth();
-  const [tab, setTab] = useState<'suggestions' | 'reviews'>('suggestions');
+  const [tab, setTab] = useState<'reports' | 'suggestions' | 'reviews'>('reports');
+  const [reports, setReports] = useState<Reported[]>([]);
   const [data, setData] = useState<{ reviews: Review[]; suggestions: Suggestion[] } | null>(null);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     try {
-      setData(await api('/api/admin/overview'));
+      const [overview, queue] = await Promise.all([
+        api<{ reviews: Review[]; suggestions: Suggestion[] }>('/api/admin/overview'),
+        api<{ reports: Reported[] }>('/api/admin/reports')
+      ]);
+      setData(overview);
+      setReports(queue.reports);
     } catch {
       setError('Not available.');
     }
@@ -41,11 +60,40 @@ export default function Admin() {
       <h1>Admin</h1>
       <p className="lede">Set suggestion status (authors with notifications on are told) and remove content that breaks the rules.</p>
       <div className="tabs" role="tablist">
+        <button role="tab" aria-selected={tab === 'reports'} onClick={() => setTab('reports')}>Reports ({reports.length})</button>
         <button role="tab" aria-selected={tab === 'suggestions'} onClick={() => setTab('suggestions')}>Suggestions ({data.suggestions.length})</button>
         <button role="tab" aria-selected={tab === 'reviews'} onClick={() => setTab('reviews')}>Reviews ({data.reviews.length})</button>
       </div>
 
       <div className="reviews">
+        {tab === 'reports' && !reports.length && <p className="muted">No open reports.</p>}
+        {tab === 'reports' &&
+          reports.map(r => {
+            const reasons = [...new Set(r.reasons.split(','))].map(x => REPORT_LABELS[x as ReportReason] ?? x).join(', ');
+            const notes = r.notes.split(' | ').filter(Boolean);
+            return (
+              <article key={`${r.type}-${r.id}`} className="panel">
+                <div className="admin-row">
+                  <div>
+                    <p className="muted meta"><b>{nameOf(r.product)}</b> · {r.type} · {r.author} · <b>{r.count} report{r.count === 1 ? '' : 's'}</b>: {reasons}</p>
+                    <h4>{r.title}</h4>
+                    <p className="body">{r.body}</p>
+                    {notes.length > 0 && <p className="muted small">Notes: {notes.join(' · ')}</p>}
+                  </div>
+                  <div className="row">
+                    <button className="ghost" onClick={() => act(() => api(`/api/admin/reports/${r.type}/${r.id}/dismiss`, { method: 'POST' }))}>Dismiss</button>
+                    <button
+                      className="ghost danger"
+                      onClick={() =>
+                        confirm(`Remove this ${r.type}?`) &&
+                        act(() => api(r.type === 'review' ? `/api/admin/reviews/${r.id}` : `/api/admin/suggestions/${r.id}`, { method: 'DELETE' }))
+                      }
+                    >Remove content</button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
         {tab === 'suggestions' &&
           data.suggestions.map(s => (
             <article key={s.id} className="panel">

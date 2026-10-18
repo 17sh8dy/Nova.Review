@@ -1,5 +1,5 @@
 import { PRODUCTS, reviewable, STATUS_LABELS, SUGGESTION_STATUSES, type SuggestionStatus } from '../src/lib/products.ts';
-import { validateReview, validateSuggestion } from '../src/lib/validate.ts';
+import { validateReport, validateReview, validateSuggestion } from '../src/lib/validate.ts';
 import { resolveViewer, syncAvatar, type Viewer } from './auth.ts';
 
 export interface Env {
@@ -21,6 +21,7 @@ const json = (data: unknown, status = 200) =>
 const fail = (error: string, status: number) => json({ error }, status);
 
 const GUEST_VOTES_PER_HOUR = 20;
+const REPORTS_PER_HOUR = 10;
 const GUEST_SUGGESTIONS_PER_DAY = 5;
 const HOUR = 3_600_000;
 
@@ -184,6 +185,7 @@ async function handle(req: Request, env: Env, path: string, viewer: Viewer): Pro
     if (!account) return fail('Sign in with a Nova Account to change reviews.', 401);
     if (method === 'DELETE') {
       const r = await env.DB.prepare('DELETE FROM reviews WHERE id = ? AND account_id = ?').bind(+m[1], account.id).run();
+      if (r.meta.changes) await env.DB.prepare("DELETE FROM reports WHERE target_type = 'review' AND target_id = ?").bind(+m[1]).run();
       return r.meta.changes ? json({ ok: true }) : fail('Not found.', 404);
     }
     if (method === 'PATCH') {
@@ -211,6 +213,7 @@ async function handle(req: Request, env: Env, path: string, viewer: Viewer): Pro
       await env.DB.batch([
         env.DB.prepare('DELETE FROM votes WHERE suggestion_id = ?').bind(+m[1]),
         env.DB.prepare('DELETE FROM notifications WHERE suggestion_id = ?').bind(+m[1]),
+        env.DB.prepare("DELETE FROM reports WHERE target_type = 'suggestion' AND target_id = ?").bind(+m[1]),
         env.DB.prepare('DELETE FROM suggestions WHERE id = ?').bind(+m[1])
       ]);
       return json({ ok: true });
@@ -226,6 +229,31 @@ async function handle(req: Request, env: Env, path: string, viewer: Viewer): Pro
       return r.meta.changes ? json({ ok: true }) : fail('Not found.', 404);
     }
     return fail('Method not allowed.', 405);
+  }
+
+  // ── Reports (guests and accounts). Filing one never hides or removes anything. ──
+  if (method === 'POST' && path === '/api/reports') {
+    const v = validateReport(await body());
+    if (!v.ok) return fail(v.error, 400);
+    const { type, id, reason, note } = v.value;
+    const table = type === 'review' ? 'reviews' : 'suggestions';
+    const target = await env.DB.prepare(`SELECT id, account_id FROM ${table} WHERE id = ?`).bind(id).first<{ id: number; account_id: string | null }>();
+    if (!target) return fail('That no longer exists.', 404);
+    if (account && target.account_id === account.id) return fail('You cannot report your own post. You can edit or delete it instead.', 400);
+    const key = account ? `a:${account.id}` : `g:${await ipHash(req, env, 'report')}`;
+    const recent = await env.DB.prepare('SELECT COUNT(*) AS n FROM reports WHERE reporter_key = ? AND created_at > ?')
+      .bind(key, Date.now() - HOUR)
+      .first<{ n: number }>();
+    if ((recent?.n ?? 0) >= REPORTS_PER_HOUR) return fail('Too many reports. Try again later.', 429);
+    try {
+      await env.DB.prepare('INSERT INTO reports (target_type, target_id, reason, note, reporter_key, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .bind(type, id, reason, note || null, key, Date.now())
+        .run();
+    } catch (e) {
+      if (String(e).includes('UNIQUE')) return json({ ok: true }); // already reported: same answer, nothing to learn
+      throw e;
+    }
+    return json({ ok: true }, 201);
   }
 
   // ── Votes ───────────────────────────────────────────────────────────────
@@ -312,6 +340,9 @@ async function handle(req: Request, env: Env, path: string, viewer: Viewer): Pro
     // Delete everything this account has put on Nova.Review. The Nova Account itself is untouched.
     if (method === 'DELETE' && path === '/api/me') {
       await env.DB.batch([
+        env.DB.prepare("DELETE FROM reports WHERE target_type = 'review' AND target_id IN (SELECT id FROM reviews WHERE account_id = ?)").bind(account.id),
+        env.DB.prepare("DELETE FROM reports WHERE target_type = 'suggestion' AND target_id IN (SELECT id FROM suggestions WHERE account_id = ?)").bind(account.id),
+        env.DB.prepare('DELETE FROM reports WHERE reporter_key = ?').bind(`a:${account.id}`),
         env.DB.prepare('DELETE FROM votes WHERE suggestion_id IN (SELECT id FROM suggestions WHERE account_id = ?)').bind(account.id),
         env.DB.prepare('DELETE FROM votes WHERE voter_key = ?').bind(`a:${account.id}`),
         env.DB.prepare('DELETE FROM suggestions WHERE account_id = ?').bind(account.id),
@@ -352,9 +383,32 @@ async function admin(req: Request, env: Env, path: string, viewer: Viewer): Prom
     return json({ reviews: rows(rev), suggestions: rows(sug) });
   }
 
-  let m = path.match(/^\/api\/admin\/reviews\/(\d+)$/);
+  // The reports queue: one row per reported item, with what was reported and why.
+  if (req.method === 'GET' && path === '/api/admin/reports') {
+    const queue = (type: 'review' | 'suggestion', table: string) =>
+      env.DB.prepare(
+        `SELECT '${type}' AS type, t.id, t.product, t.title, t.body, ${NAME('t')} AS author, COUNT(*) AS count,
+                group_concat(r.reason) AS reasons, group_concat(COALESCE(r.note, ''), ' | ') AS notes, MAX(r.created_at) AS lastAt
+         FROM reports r JOIN ${table} t ON r.target_type = '${type}' AND t.id = r.target_id
+         LEFT JOIN profiles p ON p.account_id = t.account_id WHERE r.status = 'open' GROUP BY t.id`
+      );
+    const [rev, sug] = await env.DB.batch([queue('review', 'reviews'), queue('suggestion', 'suggestions')]);
+    const all = [...rows<{ lastAt: number; count: number }>(rev), ...rows<{ lastAt: number; count: number }>(sug)];
+    all.sort((a, b) => b.count - a.count || b.lastAt - a.lastAt);
+    return json({ reports: all });
+  }
+
+  // Dismiss: the content stays; the open reports on it are closed (and still block the same people re-filing).
+  let m = path.match(/^\/api\/admin\/reports\/(review|suggestion)\/(\d+)\/dismiss$/);
+  if (m && req.method === 'POST') {
+    await env.DB.prepare("UPDATE reports SET status = 'dismissed' WHERE target_type = ? AND target_id = ? AND status = 'open'").bind(m[1], +m[2]).run();
+    return json({ ok: true });
+  }
+
+  m = path.match(/^\/api\/admin\/reviews\/(\d+)$/);
   if (m && req.method === 'DELETE') {
     const r = await env.DB.prepare('DELETE FROM reviews WHERE id = ?').bind(+m[1]).run();
+    if (r.meta.changes) await env.DB.prepare("DELETE FROM reports WHERE target_type = 'review' AND target_id = ?").bind(+m[1]).run();
     return r.meta.changes ? json({ ok: true }) : fail('Not found.', 404);
   }
 
@@ -368,6 +422,7 @@ async function admin(req: Request, env: Env, path: string, viewer: Viewer): Prom
     await env.DB.batch([
       env.DB.prepare('DELETE FROM votes WHERE suggestion_id = ?').bind(id),
       env.DB.prepare('DELETE FROM notifications WHERE suggestion_id = ?').bind(id),
+      env.DB.prepare("DELETE FROM reports WHERE target_type = 'suggestion' AND target_id = ?").bind(id),
       env.DB.prepare('DELETE FROM suggestions WHERE id = ?').bind(id)
     ]);
     return json({ ok: true });

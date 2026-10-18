@@ -15,6 +15,34 @@ export interface SuggestionInput {
   showName: boolean;
 }
 
+export const REPORT_REASONS = ['spam', 'harassment', 'inappropriate', 'misleading', 'other'] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
+export const REPORT_LABELS: Record<ReportReason, string> = {
+  spam: 'Spam',
+  harassment: 'Harassment',
+  inappropriate: 'Inappropriate content',
+  misleading: 'Misleading information',
+  other: 'Other'
+};
+
+export interface ReportInput {
+  type: 'review' | 'suggestion';
+  id: number;
+  reason: ReportReason;
+  note: string;
+}
+
+export function validateReport(raw: unknown): { ok: true; value: ReportInput } | { ok: false; error: string } {
+  if (!raw || typeof raw !== 'object') return { ok: false, error: 'Invalid request.' };
+  const r = raw as Record<string, unknown>;
+  if (r.type !== 'review' && r.type !== 'suggestion') return { ok: false, error: 'Invalid request.' };
+  if (typeof r.id !== 'number' || !Number.isInteger(r.id) || r.id < 1) return { ok: false, error: 'Invalid request.' };
+  if (!REPORT_REASONS.includes(r.reason as ReportReason)) return { ok: false, error: 'Pick a reason.' };
+  const note = typeof r.note === 'string' ? r.note.replace(/\s+/g, ' ').trim() : '';
+  if (note.length > 200) return { ok: false, error: 'Keep the note under 200 characters.' };
+  return { ok: true, value: { type: r.type, id: r.id, reason: r.reason as ReportReason, note } };
+}
+
 export const LIMITS = { title: 80, body: 2000, author: 40, minBody: 10 };
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };

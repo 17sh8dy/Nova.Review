@@ -35,3 +35,13 @@ test('catalog is the four Nova products, all with a visit link', () => {
   for (const p of PRODUCTS) assert.match(p.url, /^https:\/\//);
   assert.equal(reviewable('nope'), undefined);
 });
+
+import { validateReport } from '../src/lib/validate.ts';
+
+test('reports need a known type, a positive integer id and one of the five reasons', () => {
+  assert.ok(validateReport({ type: 'review', id: 3, reason: 'spam' }).ok);
+  assert.ok(validateReport({ type: 'suggestion', id: 1, reason: 'other', note: 'hi' }).ok);
+  for (const bad of [{ type: 'user', id: 1, reason: 'spam' }, { type: 'review', id: 0, reason: 'spam' }, { type: 'review', id: 1.5, reason: 'spam' }, { type: 'review', id: 1, reason: 'rude' }, null, 'x'])
+    assert.equal(validateReport(bad).ok, false);
+  assert.equal(validateReport({ type: 'review', id: 1, reason: 'spam', note: 'x'.repeat(201) }).ok, false);
+});

@@ -95,3 +95,9 @@ code { background: var(--bg); padding: 1px 6px; border-radius: 4px; font-size: 1
 .admin-row select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; }
 .avatar--img { object-fit: cover; background: var(--line); }
 .byline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.more { position: relative; display: inline-block; }
+.more__btn { font-size: 20px; line-height: 1; padding: 0 4px; color: var(--muted); }
+.more__menu { position: absolute; left: 0; top: 100%; z-index: 5; min-width: 240px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; display: grid; gap: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+.more__menu button[role='menuitem'] { background: none; color: var(--text); text-align: left; padding: 6px 8px; width: 100%; }
+.more__form { min-width: 280px; padding: 12px; }
+.more__form select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: inherit; }
