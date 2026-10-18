@@ -51,7 +51,7 @@ export default function Me({ go }: { go: (to: string) => void }) {
   return (
     <>
       <div className="panel profile">
-        <Avatar name={me.displayName} />
+        <Avatar name={me.displayName} src={me.avatarUrl} />
         <div>
           <h2>{me.displayName ?? 'Nova member'}</h2>
           <p className="muted">Your Nova Profile. Your email is never shown here or to anyone else.</p>

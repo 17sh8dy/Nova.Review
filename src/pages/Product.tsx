@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, useAuth } from '../auth.tsx';
-import { Badge, date, ReviewForm, Stars, StatusPill, SuggestionForm, type Review, type Suggestion } from '../ui.tsx';
+import { Avatar, Badge, date, ReviewForm, Stars, StatusPill, SuggestionForm, type Review, type Suggestion } from '../ui.tsx';
 
 interface Product {
   slug: string;
@@ -121,8 +121,8 @@ export default function ProductPage({ slug, go }: { slug: string; go: (to: strin
                   <Stars value={r.rating} size={16} />
                   <h4>{r.title}</h4>
                   <p className="body">{r.body}</p>
-                  <p className="muted meta">
-                    {r.author} · {date(r.createdAt)}{r.editedAt ? ' (edited)' : ''} {r.verified ? <Badge>Nova Account</Badge> : null}
+                  <p className="muted meta byline">
+                    {r.avatar && <Avatar name={r.author} src={r.avatar} size={20} />}{r.author} · {date(r.createdAt)}{r.editedAt ? ' (edited)' : ''} {r.verified ? <Badge>Nova Account</Badge> : null}
                   </p>
                   {r.mine ? (
                     <p className="actions">
@@ -177,7 +177,7 @@ export default function ProductPage({ slug, go }: { slug: string; go: (to: strin
                   <div>
                     <h4>{s.title} <StatusPill status={s.status} /></h4>
                     <p className="body">{s.body}</p>
-                    <p className="muted meta">{s.author} · {date(s.createdAt)} {s.verified ? <Badge>Nova Account</Badge> : null}</p>
+                    <p className="muted meta byline">{s.avatar && <Avatar name={s.author} src={s.avatar} size={20} />}{s.author} · {date(s.createdAt)} {s.verified ? <Badge>Nova Account</Badge> : null}</p>
                     {s.mine ? (
                       <p className="actions">
                         <button className="link" onClick={() => setEditing(-s.id)}>Edit</button>

@@ -11,6 +11,7 @@ export interface Review {
   title: string;
   body: string;
   author: string;
+  avatar: string | null;
   verified: number;
   mine: number;
   createdAt: number;
@@ -24,6 +25,7 @@ export interface Suggestion {
   status: SuggestionStatus;
   votes: number;
   author: string;
+  avatar: string | null;
   verified: number;
   mine: number;
   voted: number;
@@ -42,8 +44,15 @@ export const StatusPill = ({ status }: { status: SuggestionStatus }) => (
   <span className={`pill pill--${status}`}>{STATUS_LABELS[status]}</span>
 );
 
-/** A letter in a circle. Profile pictures need Nova.Help to serve them publicly; not built yet. */
-export const Avatar = ({ name }: { name: string | null }) => <span className="avatar">{(name ?? '?').trim().charAt(0).toUpperCase() || '?'}</span>;
+/** The person's Nova profile picture when they have one (and chose to show it), else a letter in a circle. */
+export const Avatar = ({ name, src, size }: { name: string | null; src?: string | null; size?: number }) => {
+  const style = size ? { width: size, height: size, fontSize: size * 0.45 } : undefined;
+  return src ? (
+    <img className="avatar avatar--img" src={src} alt="" style={style} />
+  ) : (
+    <span className="avatar" style={style}>{(name ?? '?').trim().charAt(0).toUpperCase() || '?'}</span>
+  );
+};
 
 export function ShowNameToggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (

@@ -67,7 +67,7 @@ function Shell() {
           <span className="row">
           {me?.isAdmin && <a href="/admin" onClick={link('/admin')}>Admin</a>}
           <a href="/me" className="who" onClick={link('/me')}>
-            <Avatar name={me?.displayName ?? null} />
+            <Avatar name={me?.displayName ?? null} src={me?.avatarUrl} />
             {me?.displayName ?? 'My account'}
             {me?.unread ? <i className="dot" aria-label={`${me.unread} new notifications`}>{me.unread}</i> : null}
           </a>

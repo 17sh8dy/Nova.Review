@@ -1,6 +1,6 @@
 import { PRODUCTS, reviewable, STATUS_LABELS, SUGGESTION_STATUSES, type SuggestionStatus } from '../src/lib/products.ts';
 import { validateReview, validateSuggestion } from '../src/lib/validate.ts';
-import { resolveViewer, type Viewer } from './auth.ts';
+import { resolveViewer, syncAvatar, type Viewer } from './auth.ts';
 
 export interface Env {
   DB: D1Database;
@@ -36,11 +36,15 @@ const NAME = (t: string) => `CASE WHEN ${t}.account_id IS NOT NULL
   THEN CASE WHEN ${t}.show_name = 1 THEN COALESCE(p.display_name, 'Anonymous') ELSE 'Anonymous' END
   ELSE COALESCE(${t}.guest_name, 'Anonymous') END`;
 
+// The picture is linked only from content whose author chose to show their name (same rule as the name).
+const AVATAR = (t: string) => `CASE WHEN ${t}.account_id IS NOT NULL AND ${t}.show_name = 1 AND p.avatar_key IS NOT NULL
+  THEN '/api/avatars/' || p.avatar_key || '?v=' || p.avatar_etag END`;
+
 const REVIEW_COLS = `r.id, r.product, r.rating, r.title, r.body, r.created_at AS createdAt, r.edited_at AS editedAt,
-  r.account_id IS NOT NULL AS verified, ${NAME('r')} AS author, COALESCE(r.account_id = ?, 0) AS mine`;
+  r.account_id IS NOT NULL AS verified, ${NAME('r')} AS author, ${AVATAR('r')} AS avatar, COALESCE(r.account_id = ?, 0) AS mine`;
 
 const SUGGESTION_COLS = `s.id, s.product, s.title, s.body, s.status, s.created_at AS createdAt,
-  COALESCE(r_votes.n, 0) AS votes, ${NAME('s')} AS author, s.account_id IS NOT NULL AS verified,
+  COALESCE(r_votes.n, 0) AS votes, ${NAME('s')} AS author, ${AVATAR('s')} AS avatar, s.account_id IS NOT NULL AS verified,
   COALESCE(s.account_id = ?, 0) AS mine,
   EXISTS (SELECT 1 FROM votes v WHERE v.suggestion_id = s.id AND v.voter_key = ?) AS voted`;
 const SUGGESTION_FROM = `suggestions s
@@ -59,6 +63,24 @@ async function handle(req: Request, env: Env, path: string, viewer: Viewer): Pro
       ? ((await env.DB.prepare('SELECT default_show_name AS d FROM profiles WHERE account_id = ?').bind(account.id).first<{ d: number }>())?.d ?? 1)
       : 1;
   const voterKey = async () => (account ? `a:${account.id}` : `g:${await ipHash(req, env, 'vote')}`);
+
+  // ── Profile pictures: served from our copy, by a random key that is not the Nova id ──────
+  const pic = path.match(/^\/api\/avatars\/([0-9a-f]{32})$/);
+  if (pic && method === 'GET') {
+    const row = await env.DB.prepare('SELECT avatar_b64 AS b, avatar_type AS t, avatar_etag AS e FROM profiles WHERE avatar_key = ?')
+      .bind(pic[1])
+      .first<{ b: string; t: string; e: string }>();
+    if (!row) return fail('Not found.', 404);
+    return new Response(Uint8Array.from(atob(row.b), c => c.charCodeAt(0)), {
+      headers: {
+        'content-type': row.t,
+        // ?v=<etag> changes with the picture, so this can be cached hard.
+        'cache-control': 'public, max-age=31536000, immutable',
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'; sandbox"
+      }
+    });
+  }
 
   // ── Catalog ─────────────────────────────────────────────────────────────
   if (method === 'GET' && path === '/api/products') {
@@ -236,15 +258,21 @@ async function handle(req: Request, env: Env, path: string, viewer: Viewer): Pro
     if (!account) return fail('Sign in with a Nova Account.', 401);
 
     if (method === 'GET' && path === '/api/me') {
+      await syncAvatar(env, account); // once per page load, with the person's own token
       const [prefs, unread] = await env.DB.batch([
-        env.DB.prepare('SELECT notify, default_show_name AS defaultShowName FROM profiles WHERE account_id = ?').bind(account.id),
+        env.DB.prepare(
+          `SELECT notify, default_show_name AS defaultShowName,
+                  CASE WHEN avatar_key IS NOT NULL THEN '/api/avatars/' || avatar_key || '?v=' || avatar_etag END AS avatarUrl
+           FROM profiles WHERE account_id = ?`
+        ).bind(account.id),
         env.DB.prepare('SELECT COUNT(*) AS n FROM notifications WHERE account_id = ? AND read = 0').bind(account.id)
       ]);
-      const p = rows<{ notify: number; defaultShowName: number }>(prefs)[0];
+      const p = rows<{ notify: number; defaultShowName: number; avatarUrl: string | null }>(prefs)[0];
       return json({
         accountId: account.id,
         isAdmin: isAdminAccount(env, viewer),
         displayName: account.name,
+        avatarUrl: p?.avatarUrl ?? null,
         notify: !!p?.notify,
         defaultShowName: !!p?.defaultShowName,
         unread: rows<{ n: number }>(unread)[0]?.n ?? 0

@@ -5,7 +5,7 @@ import { browserStorage } from '@nova/account-client/storage';
 const storage = browserStorage('nova.review.account');
 const client = createNovaAccountClient({
   product: 'nova-review',
-  scopes: ['identity'],
+  scopes: ['identity', 'avatar'],
   storage,
   origin: import.meta.env.VITE_ACCOUNTS_ORIGIN || undefined
 });
@@ -23,6 +23,7 @@ export interface Me {
   accountId: string;
   isAdmin: boolean;
   displayName: string | null;
+  avatarUrl: string | null;
   notify: boolean;
   defaultShowName: boolean;
   unread: number;

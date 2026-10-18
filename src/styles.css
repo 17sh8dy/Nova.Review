@@ -93,3 +93,5 @@ button.link.danger { color: var(--danger); }
 code { background: var(--bg); padding: 1px 6px; border-radius: 4px; font-size: 13px; }
 .admin-row { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
 .admin-row select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; }
+.avatar--img { object-fit: cover; background: var(--line); }
+.byline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
