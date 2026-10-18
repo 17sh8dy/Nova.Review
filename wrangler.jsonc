@@ -1,0 +1,13 @@
+{
+  // Nova.Review: static React app (dist/) + a Worker for /api, reviews in D1.
+  // database_id is a placeholder until `wrangler d1 create nova-review` is run on the account.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nova-review",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "dist", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] },
+  "d1_databases": [{ "binding": "DB", "database_name": "nova-review", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }],
+  // ADMIN_ACCOUNT_IDS: comma-separated Nova account ids who get the Admin page (your id is shown on /me).
+  // Real values for IP_SALT / ADMIN_TOKEN belong in `wrangler secret put`, not here.
+  "vars": { "IP_SALT": "dev-only-change-me", "ADMIN_ACCOUNT_IDS": "" }
+}

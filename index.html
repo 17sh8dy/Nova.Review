@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="Read and write reviews for Nova products." />
+    <title>Nova Review</title>
+    <!-- Inline on purpose: if the app's CSS/JS never loads, this is all that is left, and a blank
+         dark page tells nobody anything. -->
+    <style>
+      body { margin: 0; background: #0e0d12; color: #f1eff6; font: 16px/1.5 system-ui, sans-serif; }
+      .boot { max-width: 520px; margin: 20vh auto 0; padding: 0 16px; }
+      .boot h1 { font-size: 22px; margin: 0 0 8px; }
+      .boot p { color: #9a96a8; margin: 0 0 8px; }
+      .boot code { background: #17151d; padding: 2px 6px; border-radius: 4px; color: #f1eff6; }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="boot" id="boot"><h1>Nova.Review</h1><p>Loading…</p></div>
+    </div>
+    <noscript><div class="boot"><h1>Nova.Review</h1><p>This site needs JavaScript.</p></div></noscript>
+    <script>
+      // A classic script, so it still runs where the module bundle cannot (file:// blocks modules).
+      (function () {
+        var boot = document.getElementById('boot');
+        function say(html) { if (boot) boot.innerHTML = '<h1>Nova.Review</h1>' + html; }
+        if (location.protocol === 'file:') {
+          say('<p>This page cannot run from a file. It is a web app with a server behind it.</p>' +
+              '<p>From the project folder run <code>npm start</code>, then open <code>http://localhost:8787</code>.</p>');
+          return;
+        }
+        // Still showing the placeholder after 8s means the bundle failed to load or start.
+        setTimeout(function () {
+          if (document.getElementById('boot')) say('<p>The app did not start. Try reloading the page.</p>');
+        }, 8000);
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

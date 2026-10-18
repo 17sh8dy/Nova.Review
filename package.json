@@ -1,0 +1,35 @@
+{
+  "name": "@nova/review",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nova.Review - public reviews for every public Nova product.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "wrangler dev",
+    "db:local": "wrangler d1 migrations apply nova-review --local",
+    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "start": "npm run build && npm run db:local && wrangler dev --port 8787"
+  },
+  "engines": {
+    "node": ">=22.6"
+  },
+  "dependencies": {
+    "@hugeicons/core-free-icons": "^4.3.5",
+    "@hugeicons/react": "^1.1.10",
+    "@nova/account-client": "file:../NovaHelp/packages/nova-account-client",
+    "motion": "^12.43.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261018.1",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^6.1.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "wrangler": "^4.151.1"
+  }
+}
