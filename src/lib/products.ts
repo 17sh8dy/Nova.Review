@@ -12,7 +12,8 @@ export const PRODUCTS: Product[] = [
   { slug: 'atlas', name: 'Atlas', tagline: 'The desktop assistant, and its website.', url: 'https://atlas-website.shadylabs.workers.dev', public: true },
   { slug: 'nova', name: 'Nova', tagline: 'The front door to the Nova ecosystem.', url: 'https://nova-780.pages.dev', public: true },
   { slug: 'nova-help', name: 'Nova.Help', tagline: 'Support for every Nova product.', url: 'https://nova-help.shadylabs.workers.dev', public: true },
-  { slug: 'nova-legal', name: 'Nova Legal', tagline: 'Legal information for the Nova ecosystem.', url: 'https://nova-legal.shadylabs.workers.dev', public: true }
+  { slug: 'nova-legal', name: 'Nova Legal', tagline: 'Legal information for the Nova ecosystem.', url: 'https://nova-legal.shadylabs.workers.dev', public: true },
+  { slug: 'replay-gg', name: 'Replay.gg', tagline: 'Record full sessions or save the moment you almost missed.', url: 'https://replay-gg-site.shadylabs.workers.dev', public: true }
 ];
 
 export const reviewable = (slug: string) => PRODUCTS.find(p => p.slug === slug && p.public);
