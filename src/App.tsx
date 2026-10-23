@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './auth.tsx';
 import { Avatar } from './ui.tsx';
+import { NovaSwitcher } from './components/NovaSwitcher.tsx';
 import Home from './pages/Home.tsx';
 import ProductPage from './pages/Product.tsx';
 import Me from './pages/Me.tsx';
@@ -62,7 +63,10 @@ function Shell() {
   return (
     <>
       <header>
-        <a href="/" className="brand" onClick={link('/')}>Nova<span>.Review</span></a>
+        <span className="row">
+          <a href="/" className="brand" onClick={link('/')}>Nova<span>.Review</span></a>
+          <NovaSwitcher />
+        </span>
         {signedIn ? (
           <span className="row">
           {me?.isAdmin && <a href="/admin" onClick={link('/admin')}>Admin</a>}
