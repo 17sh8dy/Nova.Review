@@ -31,7 +31,7 @@ test('rejects non-objects', () => {
 });
 test('suggestions need no rating', () => assert.ok(validateSuggestion({ title: 'Dark mode', body: 'Please add a dark mode.' }).ok));
 test('catalog is the five Nova products, all with a visit link', () => {
-  assert.deepEqual(PRODUCTS.map(p => p.slug), ['atlas', 'nova', 'nova-help', 'nova-legal', 'replay-gg']);
+  assert.deepEqual(PRODUCTS.map(p => p.slug), ['atlas', 'nova', 'nova-cut', 'nova-help', 'nova-legal', 'replay-gg']);
   for (const p of PRODUCTS) assert.match(p.url, /^https:\/\//);
   assert.equal(reviewable('nope'), undefined);
 });
